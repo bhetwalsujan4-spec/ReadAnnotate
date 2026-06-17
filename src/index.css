@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  /* Ink — the dark, low-stimulation reading surface */
+  --color-ink: #14171c;
+  --color-ink-2: #1b1f26;
+  --color-ink-3: #262b34;
+  --color-ink-border: #323844;
+
+  /* Paper — light surfaces and text-on-dark */
+  --color-paper: #f4f1ea;
+  --color-paper-dim: #c9c4b8;
+
+  /* Lamp amber — primary accent, the "pool of light" around a focused sentence */
+  --color-lamp: #d98e3f;
+  --color-lamp-soft: #f0b66c;
+
+  /* Sage — secondary accent, used for saved annotations / highlighter marks */
+  --color-sage: #6fa88f;
+  --color-sage-soft: #9cc4b1;
+
+  --color-ink-muted: #8b92a0;
+
+  --font-display: "Spectral", "Iowan Old Style", ui-serif, serif;
+  --font-body: "Inter", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+html.light {
+  --color-ink: #f4f1ea;
+  --color-ink-2: #ffffff;
+  --color-ink-3: #e7e2d6;
+  --color-ink-border: #d8d2c2;
+  --color-paper: #1d1b16;
+  --color-paper-dim: #5b5648;
+  --color-ink-muted: #6b6557;
+}
+
+html.light body {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+/* Respect reduced-motion preferences throughout the app */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-3);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Visible keyboard focus everywhere, no focus traps removed */
+:focus-visible {
+  outline: 2px solid var(--color-lamp);
+  outline-offset: 2px;
+}
