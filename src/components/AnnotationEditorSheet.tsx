@@ -8,6 +8,7 @@ export default function AnnotationEditorSheet() {
   const isOpen = useUiStore((s) => s.isAnnotationEditorOpen)
   const setOpen = useUiStore((s) => s.setAnnotationEditorOpen)
   const fileName = useReaderStore((s) => s.fileName)
+  const pdfId = useReaderStore((s) => s.pdfId)
   const currentPage = useReaderStore((s) => s.currentPage)
   const readingMode = useReaderStore((s) => s.readingMode)
   const sentences = useReaderStore((s) => s.sentences)
@@ -20,7 +21,7 @@ export default function AnnotationEditorSheet() {
 
   const excerpt =
     readingMode === 'TEXT'
-      ? sentences[sentenceIndex]?.text ?? '(no sentence detected on this page)'
+      ? sentences[sentenceIndex]?.text ?? '(no paragraph detected on this page)'
       : `Scan region near ${Math.round(scanWindowTop * 100)}% down the page`
 
   const close = () => {
@@ -33,6 +34,7 @@ export default function AnnotationEditorSheet() {
     setSaving(true)
     await AnnotationRepository.add({
       pdfName: fileName,
+      pdfId: pdfId ?? fileName,
       pageNumber: currentPage,
       excerptText: excerpt,
       noteText: note.trim(),

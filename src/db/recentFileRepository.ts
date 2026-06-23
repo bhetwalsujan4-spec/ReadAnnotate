@@ -19,6 +19,10 @@ export const RecentFileRepository = {
     return db.recentFiles.where('name').equals(name).first()
   },
 
+  async byPdfId(pdfId: string): Promise<RecentFile | undefined> {
+    return db.recentFiles.where('pdfId').equals(pdfId).first()
+  },
+
   async remove(id: number): Promise<void> {
     await db.recentFiles.delete(id)
   },

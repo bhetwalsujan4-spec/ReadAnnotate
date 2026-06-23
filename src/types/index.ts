@@ -2,9 +2,26 @@
 
 export type ReadingMode = 'TEXT' | 'SCAN'
 
+export interface PdfReference {
+  title?: string
+  author?: string
+  year?: string
+  journal?: string
+  volume?: string
+  issue?: string
+  pages?: string
+  doi?: string
+  url?: string
+  publisher?: string
+  place?: string
+  itemType?: string  // e.g. "journalArticle", "book", "report"
+  extra?: string
+}
+
 export interface Annotation {
   id?: number
   pdfName: string
+  pdfId: string
   pageNumber: number
   excerptText: string
   noteText: string
@@ -17,6 +34,8 @@ export interface Annotation {
 export interface RecentFile {
   id?: number
   name: string
+  pdfId: string
+  reference?: PdfReference
   lastPage: number
   lastSentenceIndex: number
   lastScanTop: number
@@ -34,6 +53,7 @@ export interface AppSettings {
   scanWindowHeightPct: number // 0-1, relative to viewport height
   scanWindowStepPct: number // 0-1, relative to window height
   theme: 'dark' | 'light'
+  highlightBrightness: number  // 0–1, default 1
 }
 
 export interface SentenceBox {

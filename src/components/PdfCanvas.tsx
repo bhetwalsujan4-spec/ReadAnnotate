@@ -68,7 +68,7 @@ export default function PdfCanvas({ children }: { children?: ReactNode }) {
   const viewport = currentPageProxy ? currentPageProxy.getViewport({ scale }) : null
 
   return (
-    <div ref={containerRef} className="mx-auto w-full max-w-3xl">
+    <div ref={containerRef} className="w-full">
       {viewport && (
         <div className="relative mx-auto" style={{ width: viewport.width, height: viewport.height }}>
           <canvas ref={canvasRef} className="block select-none rounded-sm shadow-2xl shadow-black/40" />

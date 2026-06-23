@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   scanWindowHeightPct: 0.2,
   scanWindowStepPct: 0.5,
   theme: 'dark',
+  highlightBrightness: 1,
 }
 
 interface SettingsState extends AppSettings {

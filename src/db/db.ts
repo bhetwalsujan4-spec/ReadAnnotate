@@ -11,6 +11,10 @@ class FocusPdfDatabase extends Dexie {
       annotations: '++id, pdfName, pageNumber, readingMode, timestamp',
       recentFiles: '++id, &name, updatedAt',
     })
+    this.version(2).stores({
+      annotations: '++id, pdfName, pdfId, pageNumber, readingMode, timestamp',
+      recentFiles: '++id, &name, pdfId, updatedAt',
+    })
   }
 }
 

@@ -17,7 +17,7 @@ export default function ReaderScreen() {
   }
 
   return (
-    <div className="relative px-4 py-8 pb-28">
+    <div className="relative py-8 pb-28">
       {isLoading && (
         <p className="mb-3 text-center text-xs text-ink-muted">Loading…</p>
       )}

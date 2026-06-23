@@ -2,12 +2,16 @@ import { create } from 'zustand'
 import { pdfjsLib, type PdfDocumentProxy, type PdfPageProxy } from '../lib/pdfjsSetup'
 import { extractPageSentences, detectReadingMode } from '../lib/pdfText'
 import { RecentFileRepository } from '../db/recentFileRepository'
-import type { ReadingMode, SentenceBox } from '../types'
+import { computePdfId } from '../lib/pdfFingerprint'
+import { extractPdfReference } from '../lib/pdfMetadata'
+import type { ReadingMode, SentenceBox, PdfReference } from '../types'
 
 interface ReaderState {
   pdfDoc: PdfDocumentProxy | null
   currentPageProxy: PdfPageProxy | null
   fileName: string | null
+  pdfId: string | null
+  reference: PdfReference | null
   pageCount: number
   currentPage: number
   readingMode: ReadingMode
@@ -28,11 +32,12 @@ interface ReaderState {
   setSentenceIndex: (index: number) => void
   moveScanWindow: (direction: 'up' | 'down', stepPct: number) => void
   setScanWindowTop: (top: number) => void
+  setReference: (ref: PdfReference) => void
   toggleReadingMode: () => void
   closeDocument: () => void
 }
 
-async function loadSentencesForPage(pdfDoc: PdfDocumentProxy, pageNumber: number, scale: number) {
+async function loadParagraphsForPage(pdfDoc: PdfDocumentProxy, pageNumber: number, scale: number) {
   const page = await pdfDoc.getPage(pageNumber)
   const sentences = await extractPageSentences(page, scale)
   return { page, sentences }
@@ -42,6 +47,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   pdfDoc: null,
   currentPageProxy: null,
   fileName: null,
+  pdfId: null,
+  reference: null,
   pageCount: 0,
   currentPage: 1,
   readingMode: 'TEXT',
@@ -58,14 +65,25 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       const arrayBuffer = await file.arrayBuffer()
       const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
       const mode = await detectReadingMode(pdfDoc)
-      const existing = await RecentFileRepository.byName(file.name)
-      const startPage = existing?.lastPage ?? 1
       const scale = get().scale
+
+      // Compute a stable content-based ID for this PDF so annotations survive renames.
+      const pdfId = await computePdfId(file)
+
+      // Prefer the record keyed by content hash; fall back to name match for old records.
+      const existingById = await RecentFileRepository.byPdfId(pdfId)
+      const existingByName = await RecentFileRepository.byName(file.name)
+      const record = existingById ?? existingByName
+
+      const startPage = record?.lastPage ?? 1
+
+      // Use stored reference if available, otherwise extract from PDF metadata.
+      const reference = record?.reference ?? (await extractPdfReference(pdfDoc, file.name))
 
       let sentences: SentenceBox[] = []
       let page: PdfPageProxy | null = null
       if (mode === 'TEXT') {
-        const loaded = await loadSentencesForPage(pdfDoc, startPage, scale)
+        const loaded = await loadParagraphsForPage(pdfDoc, startPage, scale)
         page = loaded.page
         sentences = loaded.sentences
       } else {
@@ -76,20 +94,24 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         pdfDoc,
         currentPageProxy: page,
         fileName: file.name,
+        pdfId,
+        reference,
         pageCount: pdfDoc.numPages,
         currentPage: startPage,
         readingMode: mode,
         sentences,
-        sentenceIndex: existing?.lastSentenceIndex ?? 0,
-        scanWindowTop: existing?.lastScanTop ?? 0,
+        sentenceIndex: record?.lastSentenceIndex ?? 0,
+        scanWindowTop: record?.lastScanTop ?? 0,
         isLoading: false,
       })
 
       await RecentFileRepository.upsert({
         name: file.name,
+        pdfId,
+        reference,
         lastPage: startPage,
-        lastSentenceIndex: existing?.lastSentenceIndex ?? 0,
-        lastScanTop: existing?.lastScanTop ?? 0,
+        lastSentenceIndex: record?.lastSentenceIndex ?? 0,
+        lastScanTop: record?.lastScanTop ?? 0,
         detectedMode: mode,
         pageCount: pdfDoc.numPages,
         updatedAt: Date.now(),
@@ -105,30 +127,31 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       set({ scale })
       return
     }
-    const { page, sentences } = await loadSentencesForPage(pdfDoc, currentPage, scale)
+    const { page, sentences } = await loadParagraphsForPage(pdfDoc, currentPage, scale)
     set({ scale, currentPageProxy: page, sentences, sentenceIndex: 0 })
   },
 
   async goToPage(targetPage: number) {
-    const { pdfDoc, pageCount, readingMode, scale, fileName } = get()
+    const { pdfDoc, pageCount, readingMode, scale, fileName, pdfId, reference, sentenceIndex, scanWindowTop } = get()
     if (!pdfDoc) return
     const page = Math.max(1, Math.min(pageCount, targetPage))
 
     if (readingMode === 'TEXT') {
-      const loaded = await loadSentencesForPage(pdfDoc, page, scale)
+      const loaded = await loadParagraphsForPage(pdfDoc, page, scale)
       set({ currentPage: page, currentPageProxy: loaded.page, sentences: loaded.sentences, sentenceIndex: 0 })
     } else {
       const pageProxy = await pdfDoc.getPage(page)
       set({ currentPage: page, currentPageProxy: pageProxy, scanWindowTop: 0 })
     }
 
-    if (fileName) {
-      const state = get()
+    if (fileName && pdfId) {
       await RecentFileRepository.upsert({
         name: fileName,
+        pdfId,
+        reference: reference ?? undefined,
         lastPage: page,
-        lastSentenceIndex: state.sentenceIndex,
-        lastScanTop: state.scanWindowTop,
+        lastSentenceIndex: sentenceIndex,
+        lastScanTop: scanWindowTop,
         detectedMode: readingMode,
         pageCount,
         updatedAt: Date.now(),
@@ -162,7 +185,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     } else if (currentPage > 1) {
       const prevPageNum = currentPage - 1
       await get().goToPage(prevPageNum)
-      // Land on the last sentence of the previous page rather than the first
+      // Land on the last paragraph of the previous page rather than the first
       const { sentences } = get()
       if (sentences.length > 0) get().setSentenceIndex(sentences.length - 1)
     }
@@ -170,10 +193,12 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   setSentenceIndex(index: number) {
     set({ sentenceIndex: index })
-    const { fileName, currentPage, pageCount, readingMode, scanWindowTop } = get()
-    if (fileName) {
+    const { fileName, pdfId, reference, currentPage, pageCount, readingMode, scanWindowTop } = get()
+    if (fileName && pdfId) {
       void RecentFileRepository.upsert({
         name: fileName,
+        pdfId,
+        reference: reference ?? undefined,
         lastPage: currentPage,
         lastSentenceIndex: index,
         lastScanTop: scanWindowTop,
@@ -193,13 +218,33 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   setScanWindowTop(top: number) {
     set({ scanWindowTop: top })
-    const { fileName, currentPage, pageCount, readingMode, sentenceIndex } = get()
-    if (fileName) {
+    const { fileName, pdfId, reference, currentPage, pageCount, readingMode, sentenceIndex } = get()
+    if (fileName && pdfId) {
       void RecentFileRepository.upsert({
         name: fileName,
+        pdfId,
+        reference: reference ?? undefined,
         lastPage: currentPage,
         lastSentenceIndex: sentenceIndex,
         lastScanTop: top,
+        detectedMode: readingMode,
+        pageCount,
+        updatedAt: Date.now(),
+      })
+    }
+  },
+
+  setReference(ref: PdfReference) {
+    set({ reference: ref })
+    const { fileName, pdfId, currentPage, pageCount, readingMode, sentenceIndex, scanWindowTop } = get()
+    if (fileName && pdfId) {
+      void RecentFileRepository.upsert({
+        name: fileName,
+        pdfId,
+        reference: ref,
+        lastPage: currentPage,
+        lastSentenceIndex: sentenceIndex,
+        lastScanTop: scanWindowTop,
         detectedMode: readingMode,
         pageCount,
         updatedAt: Date.now(),
@@ -216,6 +261,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       pdfDoc: null,
       currentPageProxy: null,
       fileName: null,
+      pdfId: null,
+      reference: null,
       pageCount: 0,
       currentPage: 1,
       sentences: [],
