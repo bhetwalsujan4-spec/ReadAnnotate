@@ -8,13 +8,20 @@ import ApertureMark from './ApertureMark'
 const supportsFileSystemAccess =
   typeof window !== 'undefined' && 'showOpenFilePicker' in window
 
-async function pickWithFSA(): Promise<{ file: File; handle: FileSystemFileHandle } | null> {
+// Loose runtime types for APIs TypeScript's lib doesn't include yet
+type FSAHandle = {
+  getFile: () => Promise<File>
+  requestPermission: (opts: { mode: string }) => Promise<string>
+}
+
+type FSAWindow = {
+  showOpenFilePicker: (opts: object) => Promise<FSAHandle[]>
+}
+
+async function pickWithFSA(): Promise<{ file: File; handle: FSAHandle } | null> {
   try {
-    const [handle] = await (
-      window as Window & {
-        showOpenFilePicker: (o: object) => Promise<FileSystemFileHandle[]>
-      }
-    ).showOpenFilePicker({
+    const w = window as unknown as FSAWindow
+    const [handle] = await w.showOpenFilePicker({
       types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }],
       multiple: false,
     })
@@ -38,16 +45,18 @@ export default function OpenPdfPanel() {
     RecentFileRepository.all().then(setRecentFiles)
   }, [])
 
-  const handleFile = (file: File, handle?: FileSystemFileHandle) => {
+  const handleFile = (file: File, handle?: FSAHandle) => {
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) return
     setReopenStatus(null)
-    // Store handle after load so the record already exists in the DB
     if (handle) {
-      // slight delay to let loadDocument create/update the record first
       setTimeout(() => {
         RecentFileRepository.byName(file.name).then((existing) => {
           if (existing) {
-            void RecentFileRepository.upsert({ ...existing, handle, updatedAt: Date.now() })
+            void RecentFileRepository.upsert({
+              ...existing,
+              handle: handle as unknown as FileSystemFileHandle,
+              updatedAt: Date.now(),
+            })
           }
         })
       }, 1500)
@@ -58,7 +67,6 @@ export default function OpenPdfPanel() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) handleFile(file)
-    // Reset so the same file can be selected again
     e.target.value = ''
   }
 
@@ -75,21 +83,20 @@ export default function OpenPdfPanel() {
   const handleReopenClick = async (rf: RecentFile) => {
     setReopenStatus(null)
 
-    // Try the stored FSA handle first
     if (rf.handle) {
       try {
-        const perm = await rf.handle.requestPermission({ mode: 'read' })
+        const h = rf.handle as unknown as FSAHandle
+        const perm = await h.requestPermission({ mode: 'read' })
         if (perm === 'granted') {
-          const file = await rf.handle.getFile()
-          handleFile(file, rf.handle)
+          const file = await h.getFile()
+          handleFile(file, h)
           return
         }
       } catch {
-        // handle is stale — fall through
+        // handle stale — fall through
       }
     }
 
-    // No handle or permission denied — ask user to pick again
     setReopenStatus(
       `Select "${rf.name}" from the file picker — your position will be restored automatically.`,
     )
@@ -109,7 +116,6 @@ export default function OpenPdfPanel() {
         FocusPDF reveals one paragraph at a time so the page can't pull your eye ahead.
       </p>
 
-      {/* Drop zone — plain div, not a label, to avoid click-relay conflicts */}
       <div
         role="button"
         tabIndex={0}
@@ -136,7 +142,6 @@ export default function OpenPdfPanel() {
         </span>
       </div>
 
-      {/* Hidden file input — used as fallback when FSA is unavailable */}
       <input
         ref={inputRef}
         type="file"
