@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileUp, RotateCcw } from 'lucide-react'
 import { useReaderStore } from '../store/readerStore'
 import { RecentFileRepository } from '../db/recentFileRepository'
+import { FileCacheRepository } from '../db/fileCacheRepository'
 import type { RecentFile } from '../types'
 import ApertureMark from './ApertureMark'
 
@@ -83,6 +84,16 @@ export default function OpenPdfPanel() {
   const handleReopenClick = async (rf: RecentFile) => {
     setReopenStatus(null)
 
+    // 1. Try the blob cache first — works in all browsers, no permission needed.
+    if (rf.pdfId) {
+      const cached = await FileCacheRepository.get(rf.pdfId)
+      if (cached) {
+        handleFile(cached)
+        return
+      }
+    }
+
+    // 2. Try the FSA handle (Chromium only, survives session but not always restart).
     if (rf.handle) {
       try {
         const h = rf.handle as unknown as FSAHandle
@@ -97,6 +108,7 @@ export default function OpenPdfPanel() {
       }
     }
 
+    // 3. Ask user to re-select; position will be restored via pdfId match.
     setReopenStatus(
       `Select "${rf.name}" from the file picker — your position will be restored automatically.`,
     )

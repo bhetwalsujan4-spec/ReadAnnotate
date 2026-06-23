@@ -8,6 +8,7 @@ import {
   ScanLine,
   AlignLeft,
   ListChecks,
+  X,
 } from 'lucide-react'
 import { useReaderStore } from '../store/readerStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -18,11 +19,13 @@ function ControlButton({
   label,
   children,
   disabled,
+  danger,
 }: {
   onClick: () => void
   label: string
   children: React.ReactNode
   disabled?: boolean
+  danger?: boolean
 }) {
   return (
     <button
@@ -30,7 +33,11 @@ function ControlButton({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className="flex h-11 min-w-11 items-center justify-center rounded-full px-3 text-paper transition-colors hover:bg-ink-3 disabled:opacity-30 disabled:hover:bg-transparent"
+      className={`flex h-11 min-w-11 items-center justify-center rounded-full px-3 transition-colors disabled:opacity-30 disabled:hover:bg-transparent ${
+        danger
+          ? 'text-ink-muted hover:bg-red-900/40 hover:text-red-400'
+          : 'text-paper hover:bg-ink-3'
+      }`}
     >
       {children}
     </button>
@@ -47,6 +54,7 @@ export default function FloatingControls() {
   const prevPage = useReaderStore((s) => s.prevPage)
   const moveScanWindow = useReaderStore((s) => s.moveScanWindow)
   const toggleReadingMode = useReaderStore((s) => s.toggleReadingMode)
+  const closeDocument = useReaderStore((s) => s.closeDocument)
   const stepPct = useSettingsStore((s) => s.scanWindowStepPct)
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen)
   const setAnnotationEditorOpen = useUiStore((s) => s.setAnnotationEditorOpen)
@@ -61,10 +69,10 @@ export default function FloatingControls() {
 
         {readingMode === 'TEXT' ? (
           <>
-            <ControlButton label="Previous sentence" onClick={() => void prevSentence()}>
+            <ControlButton label="Previous paragraph" onClick={() => void prevSentence()}>
               <ChevronUp size={18} />
             </ControlButton>
-            <ControlButton label="Next sentence" onClick={() => void nextSentence()}>
+            <ControlButton label="Next paragraph" onClick={() => void nextSentence()}>
               <ChevronDown size={18} />
             </ControlButton>
           </>
@@ -103,6 +111,12 @@ export default function FloatingControls() {
         </ControlButton>
         <ControlButton label="Settings" onClick={() => setSettingsOpen(true)}>
           <SlidersHorizontal size={18} />
+        </ControlButton>
+
+        <span className="mx-1 h-6 w-px bg-ink-3" />
+
+        <ControlButton label="Close document" onClick={closeDocument} danger>
+          <X size={18} />
         </ControlButton>
 
         <span className="ml-2 mr-1 select-none whitespace-nowrap font-mono text-xs text-ink-muted">

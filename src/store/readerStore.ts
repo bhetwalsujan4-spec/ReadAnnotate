@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { pdfjsLib, type PdfDocumentProxy, type PdfPageProxy } from '../lib/pdfjsSetup'
 import { extractPageSentences, detectReadingMode } from '../lib/pdfText'
 import { RecentFileRepository } from '../db/recentFileRepository'
+import { FileCacheRepository } from '../db/fileCacheRepository'
 import { computePdfId } from '../lib/pdfFingerprint'
 import { extractPdfReference } from '../lib/pdfMetadata'
 import type { ReadingMode, SentenceBox, PdfReference } from '../types'
@@ -69,6 +70,9 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
       // Compute a stable content-based ID for this PDF so annotations survive renames.
       const pdfId = await computePdfId(file)
+
+      // Cache the file blob so it can be reopened without a picker next time.
+      void FileCacheRepository.put(pdfId, file.name, file)
 
       // Prefer the record keyed by content hash; fall back to name match for old records.
       const existingById = await RecentFileRepository.byPdfId(pdfId)
